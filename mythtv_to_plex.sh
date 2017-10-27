@@ -66,10 +66,6 @@ if [ ! -f $INPUTFILE ]; then
     exit 1
 fi
 
-#see if we have the DB info
-#test -f /etc/mythtv/mysql.txt && . /etc/mythtv/mysql.txt
-#test -f ~/.mythtv/mysql.txt && . ~/.mythtv/mysql.txt
-
 #let's make sure we have a sane environment
 if [ -z "`which ffmpeg`" ]; then
     echo "FFMpeg not present in the path. Adjust environment or install ffmpeg"
