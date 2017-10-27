@@ -23,6 +23,5 @@ variables in the script:
     finalext="mp4"
     # Options: any preset, common are Universal, Normal, High Profile
     quality="Universal"
-    # MySQL Bash Script File with configuration options. Should look like this:
-    # MySQL Config file with username and password (DON'T PASS THEM ON COMMAND LINE"
+    # MySQL Config file with username and password (DON'T PASS THEM ON COMMAND LINE)
     mysqlinfo="~/.mythtv/mysql.cnf"
