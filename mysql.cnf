@@ -1,0 +1,5 @@
+[client]
+user = mythtv
+password = mypass
+host = localhost
+database = mythconverg

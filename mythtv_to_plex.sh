@@ -3,15 +3,36 @@
 # Based on original script by:
 # Ian Thiele
 # icthiele@gmail.com
-#Uses mythcommflag, ffmpeg, and mkvmerge to cut commercials out of h.264 encoded mpg files#
+#
+# Uses mythcommflag, ffmpeg, and mkvmerge to cut commercials out of h.264 encoded mpg files #
+# MPEG2 Recordings from the HDHomeRun use mythtranscode to cut commercials
+# MPEG4 Recordings from the HDPVR have to use ffmpeg to cut the commercials.
+#
+# N.B. There is a section of my personalized processing. You should review and modify or delete this section.
+#    Look for "PERSONALIZED PROCESSING"
+#
+# I like underscores in my filenames.  Plex does OK with them in TV Shows libraries. If you prefer 
+#     spaces, then change this
+separator="_"
+# Where to put the log file
+logdir="/home/mythtv/save"
+# TV Show Library, for archiving TV Shows
+tvlib="/mnt/disk/share/tv"
+# Home Video Llibrary, where shows not in the TV Show library will be stored
+reclib="/mnt/disk/share/recordings"
+# Where per-show thumbnail images are found
+thumbdir="/home/mythtv"
 
 # Options: mp4,mkv
 finalext="mp4"
 # Options: any preset, common are Universal, Normal, High Profile
 quality="Universal"
+# MySQL Config file with username and password (DON'T PASS THEM ON COMMAND LINE)
+mysqlinfo="~/.mythtv/mysql.cnf"
+
 if [ ! -t 1 ];then
 
-	logfile=/home/mythtv/save/$$.log
+	logfile=${logdir}/$$.log
 	# Close STDOUT file descriptor
 	exec 1<&-
 	# Close STDERR FD
@@ -44,20 +65,32 @@ if [ ! -f $INPUTFILE ]; then
     exit 1
 fi
 
-#see if we have the DB info
-test -f /etc/mythtv/mysql.txt && . /etc/mythtv/mysql.txt
-test -f ~/.mythtv/mysql.txt && . ~/.mythtv/mysql.txt
-
 #let's make sure we have a sane environment
 if [ -z "`which ffmpeg`" ]; then
     echo "FFMpeg not present in the path. Adjust environment or install ffmpeg"
     exit 1
 fi
+######
+# I should check for all the other executables here.....
+#
+########
+if [ ! -x "/usr/bin/HandBrakeCLI" ]; then
+    echo "Can't find HandBrakeCLI. Adjust settings"
+    exit 1
+fi
+if [ -z "`which mythutil`" ]; then
+    echo "mythutil not present in the path. Adjust environment or install mythutil"
+    exit 1
+fi
+if [ -z "`which mythtranscode`" ]; then
+    echo "mythtranscode not present in the path. Adjust environment or install mythtranscode"
+    exit 1
+fi
 
 #connect to DB
-#mysqlconnect="mysql -N -h$DBHostName -u$DBUserName -p$DBPassword $DBName"
-mysqlconnect="mysql --defaults-extra-file=~/.mythtv/mysql.cnf -N $DBName"
+mysqlconnect="mysql --defaults-extra-file=${mysqlinfo} -N "
 export mysqlconnect
+if echo "SELECT 1 from plexnames LIMIT 1;" | $mysqlconnect > /dev/null 2>&1;  then echo "Database Setup looks OK"; else echo "Cannot see plexnames table, is MySQL Set up correctly?"; exit 1;fi
 
 RECDIR=`dirname $INPUTFILE`
 FILENAME=`basename $INPUTFILE`
@@ -87,6 +120,7 @@ then
     exit 1
 fi
 
+echo '**************************************************************'
 echo "CHANID $chanid STARTTIME $starttime"
 title=`echo "select title from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
 subtitle=`echo "select subtitle from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
@@ -103,13 +137,16 @@ subtitle=`echo "select subtitle from recorded where basename=\"$BASENAME\";" | $
 ######
 plextitle=`echo "select plextitle from plexnames where title=\"$title\";" | $mysqlconnect`
 if [ -z "$plextitle" ];then
-	plextitle=`echo $title |  sed -e 's/ /_/g' | sed -e "s/[,\/\"\'\.()]//g"`
+	plextitle=`echo $title |  sed -e "s/ /${separator}/g" | sed -e "s/[,\/\"\'\.()]//g"`
 fi
 season=`echo "select season from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
 episode=`echo "select episode from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
 
 info=`echo "select title, subtitle from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
+echo "Bashename = $BASENAME"
+echo "Season $season Episode $episode"
 echo $info
+echo '**************************************************************'
 
 if [ $episode -gt 0 ]
 then
@@ -121,7 +158,7 @@ else
 fi
 
 if [ -n "$subtitle" ];then
-	t=`echo $subtitle |  sed -e 's/ /_/g' | sed -e "s/[,;\/\"\'\.()]//g"`
+	t=`echo $subtitle |  sed -e "s/ /${separator}/g" | sed -e "s/[,;\/\"\'\.()]//g"`
 	t="${t}."
 else 
 	t=""
@@ -132,29 +169,33 @@ fi
 #
 #     This is used for shows that are watched and then deleted in Plex, rather than watched and archived.
 # For some reason, the file names in the Videos library need to have spaces to keep them separated in Plex
-############################################3
-echo "Checking for Directory /mnt/disk/share/tv/${plextitle}"
-if [ -d "/mnt/disk/share/tv/${plextitle}" ]
+#
+# ToDo: Automatically create directories in the TV Shows Library?  Maybe.
+############################################
+echo "Checking for Directory ${tvlib}/${plextitle}"
+if [ -d "${tvlib}/${plextitle}" ]
 then
-	FINALFILE="/mnt/disk/share/tv/${plextitle}/${plextitle}.${se}${t}${finalext}"
+	FINALFILE="${tvlib}/${plextitle}/${plextitle}.${se}${t}${finalext}"
 else
 	PREFIXDT=`date -d "${starttime} UTC" "+%Y%m%d %H%M"`
-	PREFIXTITLE=`echo $plextitle | sed -e 's/_/ /g'`
-	FINALFILE="/mnt/disk/share/recordings/${PREFIXTITLE} ${PREFIXDT}.${t}${finalext}"
-echo "does /home/mythtv/${plextitle}.jpg exist?"
-	if [ -e "/home/mythtv/${plextitle}.jpg" ];then
+	PREFIXTITLE=`echo $plextitle | sed -e "s/${separator}/ /g"`
+	FINALFILE="${reclib}/${PREFIXTITLE} ${PREFIXDT}.${t}${finalext}"
+echo "does ${thumbdir}/${plextitle}.jpg exist?"
+	if [ -e "${thumbdir}/${plextitle}.jpg" ];then
 		FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-		echo "cp \"/home/mythtv/${plextitle}.jpg\" \"${FINALFILETHUMB}\""
-		cp "/home/mythtv/${plextitle}.jpg" "${FINALFILETHUMB}"
+		echo "cp \"${thumbdir}/${plextitle}.jpg\" \"${FINALFILETHUMB}\""
+		cp "${thumbdir}/${plextitle}.jpg" "${FINALFILETHUMB}"
 		FINALFILETHUMB=`echo $FINALFILE | sed -e "s/\.${finalext}$/-fanart.jpg/"`
-		echo "cp \"/home/mythtv/${plextitle}.jpg\" \"${FINALFILETHUMB}\""
-		cp "/home/mythtv/${plextitle}.jpg" "${FINALFILETHUMB}"
+		echo "cp \"${thumbdir}/${plextitle}.jpg\" \"${FINALFILETHUMB}\""
+		cp "${thumbdir}/${plextitle}.jpg" "${FINALFILETHUMB}"
 	fi
 	quality="Temp"
 fi
 echo "Final File will be ${FINALFILE}"
 
 ##########################
+# BEGINNING OF PERSONALIZED PROCESSING. DELETE OR MODIFY THIS SECTION
+#
 # I want my soccer to be copied without trancoding or lowering quality, and I want Plex to use a logo rather than put
 #   spoilers in the frame grabed picture for any of these games.
 #
@@ -166,9 +207,9 @@ then
 	###FINALFILETHUMB=`echo $(dirname "$FINALFILE")"/"$(basename "$FINALFILE" ${finalext})"jpg"`
 	###FINALFILE=`echo $(dirname "$FINALFILE")"/"$(basename "$FINALFILE" ${finalext})"mpg"`
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp /home/mythtv/liverpool_logo.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp /home/mythtv/liverpool_logo.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
 	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
 	cp "${WORKFILE}" "${FINALFILEMPG}"
@@ -176,9 +217,9 @@ then
 elif [[ `echo $FINALFILE | tr '[:upper:]' '[:lower:]'` =~ 'columbus_crew' ]]; 
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp /home/mythtv/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp /home/mythtv/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
 	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
 	cp "${WORKFILE}" "${FINALFILEMPG}"
@@ -186,9 +227,9 @@ then
 elif [[ $FINALFILE  =~ 'EPL ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp /home/mythtv/PremierLeague.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp /home/mythtv/PremierLeague.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
 	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
 	cp "${WORKFILE}" "${FINALFILEMPG}"
@@ -196,9 +237,9 @@ then
 elif [[ $FINALFILE  =~ 'MLS ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp /home/mythtv/mls.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/mls.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp /home/mythtv/mls.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/mls.jpg "${FINALFILETHUMB}"
 	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
 	cp "${WORKFILE}" "${FINALFILEMPG}"
@@ -206,9 +247,9 @@ then
 elif [[ $FINALFILE  =~ 'FIFA World Cup ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp /home/mythtv/fifa2018.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/fifa2018.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp /home/mythtv/fifa2018.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/fifa2018.jpg "${FINALFILETHUMB}"
 	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
 	cp "${WORKFILE}" "${FINALFILEMPG}"
@@ -216,16 +257,16 @@ then
 elif [[ $FINALFILE  =~ 'MLB Baseball ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp /home/mythtv/mlblogo.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/mlblogo.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp /home/mythtv/mlblogo.jpg "${FINALFILETHUMB}"
+	cp ${thumbdir}/mlblogo.jpg "${FINALFILETHUMB}"
 	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
 	cp "${WORKFILE}" "${FINALFILEMPG}"
 	quality="NORMAL"
 fi
 #################
-# End of very specific processing for sports
+# End of PERSONALIZED PROCESSING
 #################
 if [[  "quality" != "NONE" ]];
 then
