@@ -105,12 +105,14 @@ if echo "SELECT 1 from plexnames LIMIT 1;" | $mysqlconnect > /dev/null 2>&1;  th
 
 RECDIR=`dirname $INPUTFILE`
 FILENAME=`basename $INPUTFILE`
-TEMPNAME=`basename $INPUTFILE .ts`
+####
+# Some setups use .mpg, some use .ts, make sure we can handle both
+TSNAME=`basename $INPUTFILE .ts`
 
 #deteremine directory and filename
 RECDIR=`dirname $INPUTFILE`
 BASENAME=`basename $INPUTFILE`
-if [ "$TEMPNAME" != "$FILENAME" ];then
+if [ "$TSNAME" != "$FILENAME" ];then
 	newbname=`basename $BASENAME .ts`
 else
 	newbname=`basename $BASENAME .mpg`
@@ -154,7 +156,7 @@ season=`echo "select season from recorded where basename=\"$BASENAME\";" | $mysq
 episode=`echo "select episode from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
 
 info=`echo "select title, subtitle from recorded where basename=\"$BASENAME\";" | $mysqlconnect`
-echo "Bashename = $BASENAME"
+echo "Basename = $BASENAME"
 echo "Season $season Episode $episode"
 echo $info
 echo '**************************************************************'
@@ -177,6 +179,7 @@ fi
 ######
 # Plex TV shows are in directory structure.  If a MythTV recording does NOT match a TV title in the TV library
 #     then the output is put into a "Home Videos" library with the date and time as part of the Filename.
+#     I also set the quality lower for faster transcoding
 #
 #     This is used for shows that are watched and then deleted in Plex, rather than watched and archived.
 # For some reason, the file names in the Videos library need to have spaces to keep them separated in Plex
@@ -215,8 +218,6 @@ echo "Final File will be ${FINALFILE}"
 #########################################
 if [[ `echo $FINALFILE | tr '[:upper:]' '[:lower:]'` =~ 'liverpool' ]]; 
 then
-	###FINALFILETHUMB=`echo $(dirname "$FINALFILE")"/"$(basename "$FINALFILE" ${finalext})"jpg"`
-	###FINALFILE=`echo $(dirname "$FINALFILE")"/"$(basename "$FINALFILE" ${finalext})"mpg"`
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
@@ -231,7 +232,7 @@ then
 	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
 	WORKFILE=${INPUTFILE}
 	quality="Very Fast 1080p30"
-elif [[ $FINALFILE  =~ 'Premier League Soccer' ]];
+elif [[ $FINALFILE  =~ 'Premier League Soccer ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
@@ -267,8 +268,6 @@ fi
 #################
 # End of PERSONALIZED PROCESSING
 #################
-if [[  "quality" != "NONE" ]];
-then
 #lets make sure we have a cutlist before we proceed
 if [ -z "`mythutil --getcutlist --chanid $chanid --starttime "$starttime" | grep Cutlist | sed 's/Cutlist: $//'`" ]; then
     echo "no cutlist found....generating new cutlist"
@@ -301,7 +300,7 @@ if [[ $format == "MPEG Video" ]];then
 	echo "Cutting and Transcoding $format Video"
 	WORKFILE="${WORKFILEBASE}.mpg"
 	if [ -z $CUTLIST ];then
-		echo "No cutlist.  Just work on input file"
+		echo "No cutlist for MPG File.  Just work on input file"
 		WORKFILE=${INPUTFILE}
 	else
 		echo "mythtranscode --honorcutlist -m -i ${INPUTFILE} -o ${WORKFILE}"
@@ -322,7 +321,7 @@ elif [[ $format == "AVC" ]];then
 	CUTLIST=`T="";for i in $CUTLIST;do T=${T},$(($i-1));done; echo $T | sed 's/^,//'`
 	echo $CUTLIST
 	if [ -z "$CUTLIST" ];then
-		echo "No cutlist.  Just work on input file"
+		echo "No cutlist for AVC File.  Just work on input file"
 		WORKFILE=${INPUTFILE}
 	else
 		# Example
@@ -345,11 +344,12 @@ elif [[ $format == "AVC" ]];then
 	
 else 
 	echo "Format ${format} for video not recognized"
-	exit
+	exit 128
 fi # AVC
-fi # Skip cutting
 
 umask 177
+#####################
+#   quality = NONE means no transcoding at all, just copy the file to the correct filename.....can be set in personalized processing above....
 if [[ "${quality}" == "NONE" ]];
 then
 	echo "cp ${INPUTFILE} ${FINALFILE}"
@@ -377,6 +377,6 @@ rc=$?
 if [  $rc -eq 0 ];then
 	echo rm -rf ${workdir}
 else
-	echo "" | mail -s "Encode failed in ${workdir}" mythtv
+	echo "" | mail -s "Encode failed in ${workdir} or ${WORKFILE} for ${FINALFILE}" mythtv
 fi
 
