@@ -26,9 +26,10 @@ thumbdir="/home/mythtv"
 # Options: mp4,mkv
 finalext="mp4"
 # Options: any preset, common are Universal, Normal, High Profile
-quality="Universal"
+#   HandBrake v >1.0 - better presets. 
+quality="Fast 1010p30"
 # MySQL Config file with username and password (DON'T PASS THEM ON COMMAND LINE)
-mysqlinfo="~/.mythtv/mysql.cnf"
+mysqlinfo="/home/mythtv/.mythtv/mysql.cnf"
 
 if [ ! -t 1 ];then
 
@@ -77,6 +78,16 @@ fi
 if [ ! -x "/usr/bin/HandBrakeCLI" ]; then
     echo "Can't find HandBrakeCLI. Adjust settings"
     exit 1
+fi
+R=$(/usr/bin/HandBrakeCLI -z 2>&1 | grep "Very Fast 1080p30") 
+if [ $? -eq 1 ];
+then
+    echo "Using a very old Handbrake, will limit to Legacy presets"
+    echo "Suggest you use official HandBrake from http://handbrake.fr"
+    quality="Universal"
+    oldversion=1
+else
+    oldversion=0
 fi
 if [ -z "`which mythutil`" ]; then
     echo "mythutil not present in the path. Adjust environment or install mythutil"
@@ -180,7 +191,7 @@ else
 	PREFIXDT=`date -d "${starttime} UTC" "+%Y%m%d %H%M"`
 	PREFIXTITLE=`echo $plextitle | sed -e "s/${separator}/ /g"`
 	FINALFILE="${reclib}/${PREFIXTITLE} ${PREFIXDT}.${t}${finalext}"
-echo "does ${thumbdir}/${plextitle}.jpg exist?"
+	echo "does ${thumbdir}/${plextitle}.jpg exist?"
 	if [ -e "${thumbdir}/${plextitle}.jpg" ];then
 		FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 		echo "cp \"${thumbdir}/${plextitle}.jpg\" \"${FINALFILETHUMB}\""
@@ -210,60 +221,48 @@ then
 	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
 	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
-	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
-	cp "${WORKFILE}" "${FINALFILEMPG}"
-	quality="NORMAL"
+	quality="Very Fast 1080p30"
 elif [[ `echo $FINALFILE | tr '[:upper:]' '[:lower:]'` =~ 'columbus_crew' ]]; 
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
 	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
-	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
-	cp "${WORKFILE}" "${FINALFILEMPG}"
-	quality="NORMAL"
-elif [[ $FINALFILE  =~ 'EPL ' ]];
+	quality="Very Fast 1080p30"
+elif [[ $FINALFILE  =~ 'Premier League Soccer' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
 	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
-	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
-	cp "${WORKFILE}" "${FINALFILEMPG}"
-	quality="NORMAL"
+	quality="Very Fast 1080p30"
 elif [[ $FINALFILE  =~ 'MLS ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/mls.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
 	cp ${thumbdir}/mls.jpg "${FINALFILETHUMB}"
-	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
-	cp "${WORKFILE}" "${FINALFILEMPG}"
-	quality="NORMAL"
+	quality="Very Fast 1080p30"
 elif [[ $FINALFILE  =~ 'FIFA World Cup ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/fifa2018.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
 	cp ${thumbdir}/fifa2018.jpg "${FINALFILETHUMB}"
-	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
-	cp "${WORKFILE}" "${FINALFILEMPG}"
-	quality="NORMAL"
+	quality="Very Fast 1080p30"
 elif [[ $FINALFILE  =~ 'MLB Baseball ' ]];
 then
 	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
 	cp ${thumbdir}/mlblogo.jpg "${FINALFILETHUMB}"
 	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
 	cp ${thumbdir}/mlblogo.jpg "${FINALFILETHUMB}"
-	FINALFILEMPG=`echo $FINALFILE | sed -e "s/${finalext}$/mpg/"`
 	WORKFILE=${INPUTFILE}
-	cp "${WORKFILE}" "${FINALFILEMPG}"
-	quality="NORMAL"
+	quality="Very Fast 1080p30"
 fi
 #################
 # End of PERSONALIZED PROCESSING
@@ -360,12 +359,17 @@ then
 #
 elif [[ "${quality}" == "Temp" ]];
 then
-	echo "/usr/bin/HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" -e x264 -w 720 --keep-display-aspect --modulus 16 -q 24.0 -r 29.97 -a 1 -E faac,copy -B 160 -6 dpl2 -R Auto -D 0.0 --audio-copy-mask aac,ac3,dtshd,dts,mp3 --audio-fallback ffac3 -f mkv -4 --loose-anamorphic --modulus 2 -m --x264-preset superfast --h264-profile baseline --h264-level 4.0 --x264-tune film -s 1 -F"
-	/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" -e x264 -w 720 --keep-display-aspect --modulus 16 -q 24.0 -r 29.97 -a 1 -E faac,copy -B 160 -6 dpl2 -R Auto -D 0.0 --audio-copy-mask aac,ac3,dtshd,dts,mp3 --audio-fallback ffac3 -4 --loose-anamorphic --modulus 2 -m --x264-preset superfast --h264-profile baseline --h264-level 4.0 --x264-tune film -s 1 -F
+	if [ $oldversion -eq 1 ];then
+		echo "/usr/bin/HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" -e x264 -w 720 --keep-display-aspect --modulus 16 -q 24.0 -r 29.97 -a 1 -E faac,copy -B 160 -6 dpl2 -R Auto -D 0.0 --audio-copy-mask aac,ac3,dtshd,dts,mp3 --audio-fallback ffac3 -f mkv -4 --loose-anamorphic --modulus 2 -m --x264-preset superfast --h264-profile baseline --h264-level 4.0 --x264-tune film -s 1 -F"
+		/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" -e x264 -w 720 --keep-display-aspect --modulus 16 -q 24.0 -r 29.97 -a 1 -E faac,copy -B 160 -6 dpl2 -R Auto -D 0.0 --audio-copy-mask aac,ac3,dtshd,dts,mp3 --audio-fallback ffac3 -4 --loose-anamorphic --modulus 2 -m --x264-preset superfast --h264-profile baseline --h264-level 4.0 --x264-tune film -s 1 -F
+	else
+		echo "HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" --preset \"Very Fast 720p30\""
+		/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" --preset "Very Fast 720p30"
+	fi
 
 else
-	echo "/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" --preset ${quality}"
-	/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" --preset ${quality}
+	echo "/usr/bin/HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" --preset \"${quality}\""
+	/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" --preset "${quality}"
 fi
 
 rc=$?
