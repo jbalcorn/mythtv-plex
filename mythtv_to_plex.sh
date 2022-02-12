@@ -203,12 +203,23 @@ then
 	FINALFILE="${tvlib}/${plextitle}/${plextitle}.${se}${t}${finalext}"
 	if [ -z "${se}" ];then
 		echo $FINALFILE | mail -s "No Season/Episode for ${FINALFILE}" jbalcorn@gmail.com
-		# Anything recorded before 1000 hours UTC (before 6am ET) is assumed to be a rebroadcast from the night before.
+		# Any TV Show recorded before 1000 hours UTC (before 6am ET) is assumed to be a rebroadcast from the night before.
 		PREFIXDT=$(date -d "${starttime} UTC-599 minutes" "+%Y-%m-%d")
 		FINALFILE="${tvlib}/${plextitle}/${plextitle}.${PREFIXDT}.${finalext}"
 	fi
 else
-	PREFIXDT=`date -d "${starttime} UTC" "+%Y-%m-%d"`
+	# For sports, us the UTC date. 
+	# If the recording starts after 23:30 UTC, Assume the game starts at the top of the hour, which means the 
+	#    Official game date is tomorrow
+	echo "Sporting event. Checking Start date of ${starttime}"
+	min=$(TZ=UTC date -d "${starttime} UTC" "+%M")
+	if [[ $min > 30 ]];then 
+		PREFIXDT=$(TZ=UTC date -d "${starttime} UTC +30 minutes" "+%Y-%m-%d")
+		echo "Assuming recording started before event"
+	else
+		PREFIXDT=$(TZ=UTC date -d "${starttime} UTC" "+%Y-%m-%d")
+	fi
+	echo "Using Start Date of ${PREFIXDT} for TheSportsDB"
 	PREFIXTITLE=`echo $plextitle | sed -e "s/${separator}/ /g"`
 	FINALFILE="${reclib}/${PREFIXTITLE} ${PREFIXDT}.${t}${finalext}"
 	echo "does ${thumbdir}/${plextitle}.jpg exist?"
@@ -259,89 +270,77 @@ then
 	t="${team1name}_vs_${team2name}."
 fi
 echo $t
-if [[ `echo $FINALFILE | tr '[:upper:]' '[:lower:]'` =~ 'liverpool' ]]; 
-then
-	if [[ "$FINALFILE" =~ "Premier League" ]];then
-		PREFIXTITLE="English_Premier_League"
-		FINALFILE="/mnt/disk/share/sports/English Premier League/Season 2021/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	fi
-	if [[ "$FINALFILE" =~ "UEFA Champions League Soccer" ]];then
-		PREFIXTITLE="UEFA_Champions_League"
-		FINALFILE="/mnt/disk/share/sports/UEFA Champions League/Season 2021/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	fi
-	###FINALFILETHUMB=`echo $(dirname "$FINALFILE")"/"$(basename "$FINALFILE" ${finalext})"jpg"`
-	###FINALFILE=`echo $(dirname "$FINALFILE")"/"$(basename "$FINALFILE" ${finalext})"mpg"`
-	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
-	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp ${thumbdir}/liverpool_logo.jpg "${FINALFILETHUMB}"
+if [[ "$FINALFILE" =~ "Premier League Soccer" ]];then
+	PREFIXTITLE="English_Premier_League"
+	FINALFILE="/mnt/disk/share/sports/English Premier League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	WORKFILE=${INPUTFILE}
+elif [[ "$FINALFILE" =~ "UEFA Champions League Soccer" ]];then
+	PREFIXTITLE="UEFA_Champions_League"
+	FINALFILE="/mnt/disk/share/sports/UEFA Champions League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
 	WORKFILE=${INPUTFILE}
 	#quality="Fast 720p30"
-elif [[ `echo $FINALFILE | tr '[:upper:]' '[:lower:]'` =~ 'columbus_crew' ]]; 
-then
-	if [[ "$FINALFILE" =~ "MLS Soccer" ]]; then
-		PREFIXTITLE="MLS"
-		FINALFILE="/mnt/disk/share/sports/MLS/Season 2021/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	fi
-	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
-	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp ${thumbdir}/ColumbusCrewSC1.jpg "${FINALFILETHUMB}"
+elif [[ "$FINALFILE" =~ "Fútbol UEFA Champions League" ]];then
+	PREFIXTITLE="UEFA_Champions_League"
+	FINALFILE="/mnt/disk/share/sports/UEFA Champions League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
 	WORKFILE=${INPUTFILE}
-	#quality="Very Fast 1080p30"
-elif [[ "$FINALFILE"  =~ "Premier League Soccer" ]];
+	echo "1
+(Spanish)" > "/mnt/disk/share/sports/UEFA Champions League/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
+	#quality="Fast 720p30"
+elif [[ "$FINALFILE"  =~ "Fútbol Mexicano Primera División" ]];
 then
-	PREFIXTITLE="English_Premier_League"
-	FINALFILE="/mnt/disk/share/sports/English Premier League/Season 2021/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
-	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp ${thumbdir}/PremierLeague.jpg "${FINALFILETHUMB}"
+	PREFIXTITLE="Mexican_Primera_League"
+	FINALFILE="/mnt/disk/share/sports/Mexican Primera League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
 	WORKFILE=${INPUTFILE}
-	#quality="Fast 1080p30"
-elif [[ "$FINALFILE"  =~ "NFL Football" ]];
+	echo "1
+(Spanish)" > "/mnt/disk/share/sports/Mexican Primera League/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
+elif [[ "$FINALFILE"  =~ "FIFA Eliminatorias Copa Mundial 2022" ]];
+then
+	PREFIXTITLE="FIFA_World_Cup"
+	FINALFILE="/mnt/disk/share/sports/FIFA World Cup/Season 2122/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	echo "1
+(Spanish)" > "/mnt/disk/share/sports/FIFA World Cup/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
+	WORKFILE=${INPUTFILE}
+elif [[ "$FINALFILE" =~ "Fútbol UEFA Europa League" ]];then
+	PREFIXTITLE="UEFA_Europa_League"
+	FINALFILE="/mnt/disk/share/sports/UEFA Europa League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	WORKFILE=${INPUTFILE}
+	echo "1
+(Spanish)" > "/mnt/disk/share/sports/UEFA Europa League/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
+elif [[ "$FINALFILE"  =~ "NFL Football" || "$FINALFILE"  =~ "Super Bowl" ]];
 then
 	PREFIXTITLE="NFL"
-	FINALFILE="/mnt/disk/share/sports/NFL/Season 2021/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	FINALFILE="/mnt/disk/share/sports/NFL/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	WORKFILE=${INPUTFILE}
+elif [[ "$FINALFILE"  =~ "Fútbol MLS" ]];
+then
+	PREFIXTITLE="MLS"
+	Fútbol MLS
+	FINALFILE="/mnt/disk/share/sports/MLS/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	echo "1
+(Spanish)" > "/mnt/disk/share/sports/MLS/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
 	WORKFILE=${INPUTFILE}
 elif [[ "$FINALFILE"  =~ "MLS " ]];
 then
-	PREFIXDT=`date -d "${starttime} UTC" "+%Y-%m-%d"`
-	if [[ "$FINALFILE" =~ "MLS Soccer" ]]; then
-		PREFIXTITLE="MLS"
-		FINALFILE="/mnt/disk/share/sports/MLS/Season 2021/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	fi
-	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp ${thumbdir}/mls.jpg "${FINALFILETHUMB}"
-	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp ${thumbdir}/mls.jpg "${FINALFILETHUMB}"
+	PREFIXTITLE="MLS"
+	Fútbol MLS
+	FINALFILE="/mnt/disk/share/sports/MLS/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
 	WORKFILE=${INPUTFILE}
-	#quality="Very Fast 1080p30"
+elif [[ "$FINALFILE"  =~ "NBA " ]];
+then
+	PREFIXTITLE="NBA"
+	FINALFILE="/mnt/disk/share/sports/NBA/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	WORKFILE=${INPUTFILE}
 elif [[ "$FINALFILE"  =~ 'MLB Baseball' ]];
 then
 	PREFIXTITLE="MLB"
-	if [[ $t =~ _at_ ]];then
-		t=`echo $t | sed -e 's/\(.*\)_at_\(.*\)/\2_vs_\1/'`
-	fi 
-	FINALFILE="/mnt/disk/share/sports/MLB/Season 2020/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	FINALFILETHUMB=`echo $FINALFILE | sed -e "s/${finalext}$/jpg/"`
-	cp ${thumbdir}/mlblogo.jpg "${FINALFILETHUMB}"
-	FINALFILETHUMB=`echo $FINALFILETHUMB | sed -e "s/\.jpg/-fanart.jpg/"`
-	cp ${thumbdir}/mlblogo.jpg "${FINALFILETHUMB}"
-	WORKFILE=${INPUTFILE}
-	#quality="Very Fast 720p30"
+	FINALFILE="/mnt/disk/share/sports/MLB/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
 else 
 	searchtitle=$( echo $title |  sed -e "s/[,\/\"\'\.()]//g" )
 echo $searchtitle
 	if [ -d "/mnt/disk/share/sports/$searchtitle" ];
 	then
-		sportseason=$( cd "/mnt/disk/share/sports/$searchtitle"; ls --color=never -d -t */ | head -1)
-echo $sportseason
-		if [ -n "$sportseason" ];
-		then
-			FINALFILE="/mnt/disk/share/sports/${searchtitle}/${sportseason}${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-			WORKFILE=${INPUTFILE}
-		fi
+		FINALFILE="/mnt/disk/share/sports/${searchtitle}/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+		WORKFILE=${INPUTFILE}
 	fi
 fi
 
