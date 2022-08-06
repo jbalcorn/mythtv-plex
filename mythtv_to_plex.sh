@@ -27,6 +27,9 @@ thumbdir="/home/mythtv"
 finalext="mp4"
 # Options: any preset, common are Universal, Normal, High Profile
 #   HandBrake v >1.0 - better presets. 
+# The quality I like.  
+quality=' --align-av  --audio=1,1 --aencoder=aac,copy --mixdown=stereo,5point1  -e x264 --encoder-preset=fast --encoder-profile=main --encoder-level=4.1 -q 20 --two-pass --subtitle-lang-list eng --all-subtitles  -l 720 -F '
+# But I actually transcode later, just copy for now
 quality="COPY"
 # MySQL Config file with username and password (DON'T PASS THEM ON COMMAND LINE)
 mysqlinfo="/home/mythtv/.mythtv/mysql.cnf"
@@ -242,9 +245,32 @@ fi
 #
 # Liverpool and Columbus Crew get their own logos, because they're my teams.
 #   others get EPL and MLS logos.
+#
+# 2022
+# WithSportScanner now working more reliably, got rid of all the logo code.  Also can use .SportScanner files to mark the OTA
+#    Spanish language broadcasts in Plex.
 #########################################
 ##
-#  Translate all team names to ones that match thesportsdb.com
+#  To enable automatic matching via theSportScanner agent in Plex:
+#  Translate all team names to ones that match thesportsdb.com.  You need to pre-load this as recordings get scheduled.  
+# e.g.
+#+----+---------------------+----------------------+
+#| id | title               | plextitle            |
+#+----+---------------------+----------------------+
+#| 85 | León                | Leon                 |
+#| 86 | América             | CF_America           |
+#| 87 | Pumas UNAM          | Pumas                |
+#| 88 | Tigres_UANL         | Tigres               |
+#| 89 | Estados_Unidos      | USA                  |
+#| 90 | Pumas_UNAM          | Pumas                |
+#| 91 | México              | Mexico               |
+#| 92 | Panamá              | Panama               |
+#| 93 | Atlético_San_Luis   | Atletico_de_San_Luis |
+#| 94 | Alavés              | Alaves               |
+#| 95 | Atletico San Luis   | Atletico_de_San_Luis |
+#| 96 | Atlético de Madrid  | Ath_Madrid           |
+#+----+---------------------+----------------------+
+
 echo $t
 if [[ $t =~ (.*)_at_(.*)\. ]];
 then
@@ -259,88 +285,143 @@ fi
 echo "$team1 $team2"
 if [[ -n "$team1" && -n "$team2" ]];
 then
-	team1name=`echo "select plextitle from plexnames where title=\"${team1}\";" | $mysqlconnect`
+	#
+	# Because the men's and women's teams may both be "United States", start with
+	#   Event and Name just to be sure
+	sql="select plextitle from plexnames where title=\"${plextitle}-${team1}\";" 
+	echo $sql
+	team1name=`echo $sql | $mysqlconnect`
 	if [ -z "$team1name" ];then
-		team1name=$team1
+		sql="select plextitle from plexnames where title=\"${team1}\";" 
+		echo $sql
+		team1name=`echo $sql | $mysqlconnect`
+		if [ -z "$team1name" ];then
+			echo "No plexnames found for ${plextitle}-${team1}."
+			team1name=$team1
+		fi
 	fi
-	team2name=`echo "select plextitle from plexnames where title=\"${team2}\";" | $mysqlconnect`
+	echo "Home team plexname: ${team1name}"
+	sql="select plextitle from plexnames where title=\"${plextitle}-${team2}\";" 
+	echo $sql
+	team2name=`echo $sql | $mysqlconnect`
 	if [ -z "$team2name" ];then
-		team2name=$team2
+		sql="select plextitle from plexnames where title=\"${team2}\";" 
+		echo $sql
+		team2name=`echo $sql | $mysqlconnect`
+		if [ -z "$team2name" ];then
+			echo "No plexnames found for ${plextitle}-${team2}."
+			team2name=$team2
+		fi
 	fi
+	echo "Away team plexname: ${team2name}"
 	t="${team1name}_vs_${team2name}."
 fi
-echo $t
-if [[ "$FINALFILE" =~ "Premier League Soccer" ]];then
+echo "plexname translation: ${t}"
+#
+# Kludgy, but it works.  I've moved to using a SportScanner.txt file to determine seasons rather
+#   than season directories, so I don't have to edit this as seasons change.  I could data drive all
+#   this but it seems like overkill.
+#
+# No more moving jpg files in as thumbnails because the thumbnail image download in the SportScanner
+#   has been fixed
+#
+if [[ "$FINALFILE" =~ "Fútbol Premier League" ]];then
 	PREFIXTITLE="English_Premier_League"
-	FINALFILE="/mnt/disk/share/sports/English Premier League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
-elif [[ "$FINALFILE" =~ "UEFA Champions League Soccer" ]];then
-	PREFIXTITLE="UEFA_Champions_League"
-	FINALFILE="/mnt/disk/share/sports/UEFA Champions League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
-	#quality="Fast 720p30"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
+	echo "1
+(Spanish)" > "${BASEFILE}SportScanner"
+elif [[ "$FINALFILE" =~ "Premier League" ]];then
+	PREFIXTITLE="English_Premier_League"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 elif [[ "$FINALFILE" =~ "Fútbol UEFA Champions League" ]];then
 	PREFIXTITLE="UEFA_Champions_League"
-	FINALFILE="/mnt/disk/share/sports/UEFA Champions League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 	echo "1
-(Spanish)" > "/mnt/disk/share/sports/UEFA Champions League/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
+(Spanish)" > "${BASEFILE}SportScanner"
+elif [[ "$FINALFILE" =~ "UEFA Champions League" ]];then
+	PREFIXTITLE="UEFA_Champions_League"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 	#quality="Fast 720p30"
+elif [[ "$FINALFILE" =~ "Spanish Primera Division" ]];then
+	PREFIXTITLE="Spanish_La_Liga"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 elif [[ "$FINALFILE"  =~ "Fútbol Mexicano Primera División" ]];
 then
 	PREFIXTITLE="Mexican_Primera_League"
-	FINALFILE="/mnt/disk/share/sports/Mexican Primera League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 	echo "1
-(Spanish)" > "/mnt/disk/share/sports/Mexican Primera League/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
-elif [[ "$FINALFILE"  =~ "FIFA Eliminatorias Copa Mundial 2022" ]];
+(Spanish)" > "${BASEFILE}SportScanner"
+elif [[ "$FINALFILE"  =~ "FIFA Eliminatorias Copa Mundial" ]];
 then
 	PREFIXTITLE="FIFA_World_Cup"
-	FINALFILE="/mnt/disk/share/sports/FIFA World Cup/Season 2122/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/Season 2122/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 	echo "1
-(Spanish)" > "/mnt/disk/share/sports/FIFA World Cup/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
-	WORKFILE=${INPUTFILE}
+(Spanish)" > "${BASEFILE}SportScanner"
 elif [[ "$FINALFILE" =~ "Fútbol UEFA Europa League" ]];then
 	PREFIXTITLE="UEFA_Europa_League"
-	FINALFILE="/mnt/disk/share/sports/UEFA Europa League/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 	echo "1
-(Spanish)" > "/mnt/disk/share/sports/UEFA Europa League/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
-elif [[ "$FINALFILE"  =~ "NFL Football" || "$FINALFILE"  =~ "Super Bowl" ]];
+(Spanish)" > "${BASEFILE}SportScanner"
+elif [[ "$FINALFILE"  =~ "NFL " || "$FINALFILE"  =~ "Super Bowl" ]];
 then
 	PREFIXTITLE="NFL"
-	FINALFILE="/mnt/disk/share/sports/NFL/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 elif [[ "$FINALFILE"  =~ "Fútbol MLS" ]];
 then
 	PREFIXTITLE="MLS"
-	Fútbol MLS
-	FINALFILE="/mnt/disk/share/sports/MLS/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 	echo "1
-(Spanish)" > "/mnt/disk/share/sports/MLS/${PREFIXTITLE}.${PREFIXDT}.${t}.SportScanner"
-	WORKFILE=${INPUTFILE}
+(Spanish)" > "${BASEFILE}SportScanner"
 elif [[ "$FINALFILE"  =~ "MLS " ]];
 then
 	PREFIXTITLE="MLS"
-	Fútbol MLS
-	FINALFILE="/mnt/disk/share/sports/MLS/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 elif [[ "$FINALFILE"  =~ "NBA " ]];
 then
 	PREFIXTITLE="NBA"
-	FINALFILE="/mnt/disk/share/sports/NBA/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-	WORKFILE=${INPUTFILE}
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
+elif [[ "$FINALFILE"  =~ 'NHL ' ]];
+then
+	PREFIXTITLE="NHL"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
 elif [[ "$FINALFILE"  =~ 'MLB Baseball' ]];
 then
 	PREFIXTITLE="MLB"
-	FINALFILE="/mnt/disk/share/sports/MLB/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
+elif [[ "$FINALFILE"  =~ 'Torneo de Francia' ]];
+then
+	PREFIXTITLE="Tournoi_de_France"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
+	echo "1
+(Spanish)" > "${BASEFILE}SportScanner"
+elif [[ "$FINALFILE"  =~ 'Fútbol CONMEBOL Libertadores' ]];
+then
+	PREFIXTITLE="Copa_Libertadores"
+	BASEFILE="/mnt/disk/share/sports/${PREFIXTITLE}/${PREFIXTITLE}.${PREFIXDT}.${t}"
+	FINALFILE="${BASEFILE}${finalext}"
+	echo "1
+(Spanish)" > "${BASEFILE}SportScanner"
 else 
 	searchtitle=$( echo $title |  sed -e "s/[,\/\"\'\.()]//g" )
 echo $searchtitle
 	if [ -d "/mnt/disk/share/sports/$searchtitle" ];
 	then
 		FINALFILE="/mnt/disk/share/sports/${searchtitle}/${PREFIXTITLE}.${PREFIXDT}.${t}${finalext}"
-		WORKFILE=${INPUTFILE}
 	fi
 fi
 
@@ -365,6 +446,9 @@ else
 	# Now we split. 
 	# MPEG2 Recordings from the HDHomeRun use mythtranscode to cut commercials
 	# MPEG4 Recordings from the HDPVR have to use ffmpeg to cut the commercials.
+	#
+	# 2021
+	# We just use ffmpeg for all cutting now
 
 	format=`mediainfo --Inform="Video;%Format%" ${INPUTFILE}`
 
@@ -372,11 +456,13 @@ else
 	#cutlist provides a list of frames in the format start-end,[start1-end1,....] to cut 
 	# for FFMpeg, we swap this list so that it provides the ranges of video we want in the format
 	#	start-end start1:end1 ....
-	# For Mythtranscode, we use the Cutlist as it is.
+	# For Mythtranscode, we use the Cutlist as it is. (DEPRECATED)
 	CUTLIST=`mythutil --chanid $chanid --starttime "$starttime" --getcutlist | grep Cutlist | sed 's/Cutlist: //' | sed 's/-/,/g' `
 	echo "CUTLIST=${CUTLIST}"
 
 	echo "Cutting and Transcoding $format Video"
+	#
+	# Determine if we're keeping the even or the odd chunks
 	if [[ $CUTLIST =~ ^0, ]];then
 	CUTLIST=$( echo $CUTLIST | sed -e 's/^0,//' )
 		AWKCMD='NR%2==1'
@@ -398,6 +484,8 @@ else
 	echo ${query}
 	totalframes=$(echo ${query} | $mysqlconnect)
 
+	#
+	# Get the list of keyframes and the list of millisecond markers from the mythtv database
 	KEYLIST=`for frame in $CUTLIST;do  i=$(( ${frame} - ${lag} )); j=$(( ${i} + ${scope} )); query="select mark FROM recordedseek where chanid=$chanid and starttime='$starttime' and type=33 and mark >= ${i} and mark < ${j}  order by offset limit 3 ;"; echo ${query} | $mysqlconnect 2>/dev/null; done | sed -n '1,${p;n;n}' | tr "\n" " "`
 	MSLIST=`for frame in $CUTLIST;do  i=$(( ${frame} - ${lag} )); j=$(( ${i} + ${scope} )); query="select offset FROM recordedseek where chanid=$chanid and starttime='$starttime' and type=33 and mark >= ${i} and mark < ${j}  order by offset limit 3 ;"; echo ${query} | $mysqlconnect 2>/dev/null; done | sed -n '1,${p;n;n}' | tr "\n" " "`
 
@@ -428,67 +516,38 @@ else
 		CMD="ffmpeg -fflags +genpts -flags +global_header \
 		-ss $(ms2sf ${msstart}) -i ${INPUTFILE} \
 		-t $(ms2sf ${msduration})  \
-		-map 0:0 -c:v  copy \
-		-map 0:1 -c:a  copy \
+		-map 0 -c:v  copy -c:a  copy -c:s copy \
 		-avoid_negative_ts 1   ${workdir}/${chunkhead}_${chunk}.ts"
 		echo ${CMD}
 		$CMD
 		echo "file ${workdir}/${chunkhead}_${chunk}.ts" >> ${workdir}/out.concat
 		chunk=$(( $chunk + 1 ))
 	done
+	#
+	# stitch the chunks together
 	CMD="ffmpeg -fflags +genpts -flags +global_header -y -f concat -safe 0 -i ${workdir}/out.concat -c copy  ${WORKFILE}"
 	echo ${CMD}
 	$CMD
-#
-#	       CUTLIST=`T="";for i in $CUTLIST;do T=${T},$(($i-1));done; echo $T | sed 's/^,//'`
-#	       echo $CUTLIST
-#	       # Example
-#	       # ffmpeg -f concat -i out.ffconcat -c copy /var/lib/mythtv/recordings/2225_20140907040000.mp4
-#	       # ffmpeg -i 2225_20140907040000.mp4 -map 0 -c copy -f ssegment -segment_list out.ffconcat -segment_frames 281,44671,52797,82802,92730,116499,127329,146333,156290,180843,192567,213474,218498 out%03d.mp4
-#	       echo "ffmpeg -i  ${INPUTFILE} -map 0 -c copy -f ssegment -segment_list ${workdir}/out.ffconcat -segment_frames $CUTLIST ${workdir}/out%03d.mp4"
-#	       ffmpeg -i  ${INPUTFILE} -map 0 -c copy -f ssegment -segment_list ${workdir}/out.ffconcat -segment_frames $CUTLIST ${workdir}/out%03d.mp4
-#	       cat ${workdir}/out.ffconcat | awk $AWKCMD > ${workdir}/in.ffconcat
-#	       files=`grep file ${workdir}/in.ffconcat | sed -e 's/file //g'`
-#	       for infile in $files
-#	       do
-#		       tsfile=`echo $infile | sed -e 's/mp4/ts/'`
-#		       echo "ffmpeg -i ${workdir}/${infile} -c copy -bsf:v h264_mp4toannexb -f mpegts ${workdir}/${tsfile}"
-#		       ffmpeg -i ${workdir}/${infile} -c copy -bsf:v h264_mp4toannexb -f mpegts ${workdir}/${tsfile}
-#	       done
-#	       cat ${workdir}/in.ffconcat | sed -e 's/mp4/ts/' > ${workdir}/ts.ffconcat
-#	       echo "ffmpeg -y -f concat -safe 0 -i ${workdir}/ts.ffconcat -c copy ${WORKFILE}"
-#	       ffmpeg -y -f concat -safe 0 -i ${workdir}/ts.ffconcat -c copy ${WORKFILE}
 fi
 umask 177
+mkdir -p $(dirname ${FINALFILE})
+#
+# Offload the transcoding to a later process if it's COPY 
 if [[ "${quality}" == "COPY" ]];
 then
 	echo "Copying ${WORKFILE} to ${FINALFILE} without transcoding"
 	cp ${WORKFILE} "${FINALFILE}"
 	echo ${FINALFILE} >> /home/mythtv/save/transcode.txt
-#################
-# For videos that aren't being archived, just being watched on my tablet, use a faster, smaller setup - 720x404 and AAC superfast
-#
-elif [[ "${quality}" == "Temp" ]];
-then
-	if [ $oldversion -eq 1 ];then
-		echo "/usr/bin/HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" -e x264 -w 720 --keep-display-aspect --modulus 16 -q 24.0 -r 29.97 -a 1 -E faac,copy -B 160 -6 dpl2 -R Auto -D 0.0 --audio-copy-mask aac,ac3,dtshd,dts,mp3 --audio-fallback ffac3 -f mkv -4 --loose-anamorphic --modulus 2 -m --x264-preset superfast --h264-profile baseline --h264-level 4.0 --x264-tune film -s 1 -F"
-		/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" -e x264 -w 720 --keep-display-aspect --modulus 16 -q 24.0 -r 29.97 -a 1 -E faac,copy -B 160 -6 dpl2 -R Auto -D 0.0 --audio-copy-mask aac,ac3,dtshd,dts,mp3 --audio-fallback ffac3 -4 --loose-anamorphic --modulus 2 -m --x264-preset superfast --h264-profile baseline --h264-level 4.0 --x264-tune film -s 1 -F
-	else
-		echo "HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" --preset \"Very Fast 480p30\""
-		/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" --preset "Very Fast 480p30"
-	fi
 else
-	echo "/usr/bin/HandBrakeCLI -i ${WORKFILE} -o \"${FINALFILE}\" --preset \"${quality}\""
-	/usr/bin/HandBrakeCLI -i ${WORKFILE} -o "${FINALFILE}" --preset "${quality}"
-	#echo "Copying ${WORKFILE} to ${FINALFILE} without transcoding AND NOT SETTING FOR AUTO TRANSCODE"
-	#cp ${WORKFILE} "${FINALFILE}" 
+	echo "/usr/bin/HandBrakeCLI -i \"${WORKFILE}\" -o \"${FINALFILE}\" ${quality}"
+	/usr/bin/HandBrakeCLI -i "${WORKFILE}" -o "${FINALFILE}" ${quality}
 fi
 
 rc=$?
 
 if [  $rc -eq 0 ];then
 	rm -rf ${workdir}
-	ls -l "${FINALFILE}" | mail -s "Finished cutting ${FINALFILE}" jbalcorn@gmail.com
+	ls -l "${FINALFILE}" | mail -s "Finished cutting ${FINALFILE}" mythtv
 else
 	echo "" | mail -s "Encode failed in ${workdir}" mythtv
 fi
